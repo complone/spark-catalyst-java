@@ -1,0 +1,30 @@
+package org.apache.spark.sql.types;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Created by chengxy on 2023/04/19.
+ */
+public class MetadataBuilder {
+    Map<String, Object> map = new HashMap<>();
+
+    public MetadataBuilder putString(String key, String value){
+            return put(key, value);
+    }
+
+    private MetadataBuilder put(String key, Object value){
+        map.put(key, value);
+        return this;
+    }
+
+    public Metadata build(){
+        return new Metadata(map);
+    }
+
+    public MetadataBuilder withMetadata(Metadata metadata){
+        map.putAll(metadata.map);
+        return this;
+    }
+
+}

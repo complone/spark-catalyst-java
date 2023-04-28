@@ -1,0 +1,24 @@
+package org.apache.spark.sql.catalyst.plans.logical.basicLogicalOperators;
+
+import lombok.Data;
+import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.catalyst.plans.joinTypes.JoinType;
+import org.apache.spark.sql.catalyst.plans.logical.BinaryNode;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+
+/**
+ * Created by chengxy on 2023/04/21.
+ */
+@Data
+public class Join extends BinaryNode {
+    JoinType joinType;
+    Expression condition;
+
+    public Join(LogicalPlan left, LogicalPlan right, JoinType joinType, Expression condition){
+        super(left, right);
+        this.joinType = joinType;
+        this.condition = condition;
+    }
+
+
+}

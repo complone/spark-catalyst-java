@@ -1,0 +1,117 @@
+package org.apache.spark.sql.catalyst.parser;
+
+import jdk.nashorn.internal.parser.Lexer;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
+import org.apache.spark.sql.AnalysisException;
+import static org.apache.spark.sql.catalyst.trees.TreeNode.Origin;
+
+import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.catalyst.identifiers.TableIdentifier;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.StructType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.function.Function;
+import static org.apache.spark.sql.catalyst.parser.ParserDriver.*;
+/**
+ * Created by chengxy on 2023/04/28.
+ */
+public abstract class AbstractSqlParser implements ParserInterface{
+    public static Logger LOGGER = LoggerFactory.getLogger(AbstractSqlParser.class);
+
+    protected AstBuilder astBuilder;
+
+    public AbstractSqlParser(SQLConf conf){
+        this.astBuilder = new AstBuilder(conf);
+    }
+
+    @Override
+    public DataType parseDataType(String sqlText){
+        return parse(sqlText, (parser) ->{
+            return astBuilder.visitSingleDataType(parser.singleDataType());
+      });
+    }
+
+    public Expression parseExpression(String sqlText){
+        return parse(sqlText, (parser) -> {
+            return astBuilder.visitSingleExpression(parser.singleExpression());
+        });
+    }
+
+    protected <T> T  parse(String command,Function<SqlBaseParser,T>toResult) {
+        LOGGER.debug("Parsing command: {}", command);
+
+        SqlBaseLexer lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)));
+        lexer.removeErrorListeners();
+        lexer.addErrorListener(new ParseErrorListener());
+        lexer.legacy_setops_precedence_enbled = SQLConf.get().setOpsPrecedenceEnforced();
+
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+
+        //time consuming here
+        SqlBaseParser parser = new SqlBaseParser(tokenStream);
+
+        parser.addParseListener(new PostProcessor());
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ParseErrorListener());
+        parser.legacy_setops_precedence_enbled = SQLConf.get().setOpsPrecedenceEnforced();
+
+        try {
+            try {
+                // first, try parsing with potentially faster SLL mode
+                parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+                return toResult.apply(parser);
+            } catch (ParseCancellationException e) {
+                // if we fail, parse with LL mode
+                tokenStream.seek(0); // rewind input stream
+                parser.reset();
+                // Try Again.
+                parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+                return toResult.apply(parser);
+            }
+        } catch (ParseException e) {
+            if (e.getCommand() != null) {
+                throw e;
+            } else {
+                throw e.withCommand(command);
+            }
+        } catch (AnalysisException e) {
+            Origin position = new Origin(e.getLine(), e.getStartPosition());
+            throw new ParseException(command, e.getMessage(), position, position);
+        }
+    }
+
+
+    @Override
+    public LogicalPlan parsePlan(String sqlText){
+        return parse(sqlText, (parser) -> {
+            LogicalPlan plan = astBuilder.visitSingleStatement(parser.singleStatement());
+            if (plan != null) {
+                return plan;
+            }
+            Origin position = new Origin(null, null);
+            throw new ParseException(sqlText, "Unsupported SQL statement", position, position);
+        });
+    }
+
+    @Override
+    public TableIdentifier parseTableIdentifier(String sqlText){
+        return parse(sqlText,(parser)->{
+            return astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier());
+        });
+    }
+
+    @Override
+    public StructType parseTableSchema(String sqlText){
+        return parse(sqlText,(parser)->{
+            return astBuilder.visitSingleTableSchema(parser.singleTableSchema());
+        });
+    }
+}

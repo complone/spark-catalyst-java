@@ -1,0 +1,29 @@
+package org.apache.spark.sql;
+
+import lombok.Data;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+
+import java.io.Serializable;
+
+@Data
+public class AnalysisException extends RuntimeException implements Serializable {
+    Integer line;
+    Integer startPosition;
+    LogicalPlan plan;
+    Throwable cause;
+
+    public AnalysisException(String message, Integer line, Integer startPosition, LogicalPlan plan, Throwable cause){
+        super(message);
+        this.line = line;
+        this.startPosition = startPosition;
+        this.plan = plan;
+        this.cause = cause;
+    }
+
+    public AnalysisException(String message){
+        this(message, null, null, null, null);
+    }
+
+    //public AnalysisException(){}
+
+}
